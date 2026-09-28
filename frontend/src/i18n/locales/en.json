@@ -129,7 +129,17 @@
     "bottom": "Bottom",
     "shoes": "Shoes",
     "accessory": "Accessory",
-    "noItems": "No {{label}}"
+    "noItems": "No {{label}}",
+    "editHint": "Tap a garment to drag, rotate, or resize",
+    "rotate": "Rotate",
+    "resize": "Resize",
+    "rotateLeft": "Rotate left",
+    "rotateRight": "Rotate right",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "reset": "Reset",
+    "generateTryOn": "Generate try-on",
+    "tryOnComingSoon": "Try-on is coming soon"
   },
   "recommendation": {
     "getTitle": "Get Your Personal",

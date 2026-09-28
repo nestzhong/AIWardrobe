@@ -129,7 +129,17 @@
     "bottom": "ボトムス",
     "shoes": "シューズ",
     "accessory": "アクセサリー",
-    "noItems": "{{label}}がありません"
+    "noItems": "{{label}}がありません",
+    "editHint": "服をタップすると移動・回転・拡大縮小できます",
+    "rotate": "回転",
+    "resize": "サイズ変更",
+    "rotateLeft": "左に回転",
+    "rotateRight": "右に回転",
+    "zoomIn": "拡大",
+    "zoomOut": "縮小",
+    "reset": "リセット",
+    "generateTryOn": "試着画像を生成",
+    "tryOnComingSoon": "試着機能は近日公開予定です"
   },
   "recommendation": {
     "getTitle": "あなただけの",

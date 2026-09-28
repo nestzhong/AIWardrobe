@@ -129,7 +129,17 @@
     "bottom": "下装",
     "shoes": "鞋履",
     "accessory": "饰品",
-    "noItems": "暂无{{label}}"
+    "noItems": "暂无{{label}}",
+    "editHint": "点击服饰后可拖动、旋转、缩放",
+    "rotate": "旋转",
+    "resize": "缩放",
+    "rotateLeft": "向左旋转",
+    "rotateRight": "向右旋转",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "reset": "复位",
+    "generateTryOn": "生成试穿图",
+    "tryOnComingSoon": "试穿功能即将上线"
   },
   "recommendation": {
     "getTitle": "获取专属穿搭",

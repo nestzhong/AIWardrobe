@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight, Shuffle } from 'lucide-react'
 
 import { API_BASE, toImageUrl } from '../utils/api'
+import OutfitCanvas from '../components/OutfitCanvas'
 
 const CATEGORIES = [
     { key: 'tops', labelKey: 'outfit.top' },
@@ -23,6 +24,10 @@ export default function Outfit() {
         bottoms: 0,
         shoes: 0
     })
+
+    const [transforms, setTransforms] = useState({ tops: null, bottoms: null, shoes: null })
+    const [selectedCategory, setSelectedCategory] = useState(null)
+    const previousItemIds = useRef({ tops: null, bottoms: null, shoes: null })
 
     useEffect(() => {
         const controller = new AbortController()
@@ -106,6 +111,34 @@ export default function Outfit() {
         return items[currentIndices[category]] || items[0]
     }
 
+    const currentItemIds = {
+        tops: getCurrentItem('tops')?.id ?? null,
+        bottoms: getCurrentItem('bottoms')?.id ?? null,
+        shoes: getCurrentItem('shoes')?.id ?? null
+    }
+
+    // 切换衣物（轮播 / 随机 / 季节筛选）后，该类别的手动摆位复位
+    useEffect(() => {
+        const previous = previousItemIds.current
+        const changed = Object.keys(currentItemIds).filter(
+            (category) => previous[category] !== currentItemIds[category]
+        )
+        previousItemIds.current = currentItemIds
+
+        if (changed.length === 0) return
+        setTransforms(prev => {
+            const next = { ...prev }
+            changed.forEach((category) => { next[category] = null })
+            return next
+        })
+        setSelectedCategory(prev => (prev && changed.includes(prev) ? null : prev))
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentItemIds.tops, currentItemIds.bottoms, currentItemIds.shoes])
+
+    const handleTransformChange = (category, next) => {
+        setTransforms(prev => ({ ...prev, [category]: next }))
+    }
+
     const shiftCategory = (category, direction) => {
         const items = getItemsByCategory(category)
         if (items.length <= 1) return
@@ -177,32 +210,26 @@ export default function Outfit() {
             </header>
 
             <div className="grid gap-3 lg:grid-cols-12">
-                <section className="card lg:col-span-7 overflow-hidden">
-                    <div className="p-3 sm:p-4">
-                        <div className="liquid-panel rounded-[28px] overflow-hidden p-2 sm:p-3">
-                            <div className="h-[44vh] min-h-[340px] max-h-[560px] grid grid-rows-[44%_34%_22%] gap-2">
-                                <div className="media-tile p-2 flex items-center justify-center">
-                                    {topItem ? (
-                                        <img src={toImageUrl(topItem.image_url)} alt={topItem.item} className="w-full h-full object-contain" />
-                                    ) : (
-                                        <span className="text-xs text-zinc-400">{t('outfit.noItems', { label: t('outfit.top') })}</span>
-                                    )}
-                                </div>
-                                <div className="media-tile p-2 flex items-center justify-center">
-                                    {bottomItem ? (
-                                        <img src={toImageUrl(bottomItem.image_url)} alt={bottomItem.item} className="w-full h-full object-contain" />
-                                    ) : (
-                                        <span className="text-xs text-zinc-400">{t('outfit.noItems', { label: t('outfit.bottom') })}</span>
-                                    )}
-                                </div>
-                                <div className="media-tile p-2 flex items-center justify-center">
-                                    {shoesItem ? (
-                                        <img src={toImageUrl(shoesItem.image_url)} alt={shoesItem.item} className="w-full h-full object-contain" />
-                                    ) : (
-                                        <span className="text-xs text-zinc-400">{t('outfit.noItems', { label: t('outfit.shoes') })}</span>
-                                    )}
-                                </div>
-                            </div>
+                <section className="card lg:col-span-7 overflow-hidden flex flex-col">
+                    <div className="p-3 sm:p-4 flex-1 flex flex-col min-h-0">
+                        <div className="liquid-panel rounded-[28px] overflow-hidden p-2 sm:p-3 flex-1 min-h-0">
+                            <OutfitCanvas
+                                items={{ tops: topItem, bottoms: bottomItem, shoes: shoesItem }}
+                                transforms={transforms}
+                                selected={selectedCategory}
+                                onSelect={setSelectedCategory}
+                                onTransformChange={handleTransformChange}
+                            />
+                        </div>
+                        <div className="pt-3">
+                            <button
+                                className="btn-primary w-full opacity-60 cursor-not-allowed"
+                                type="button"
+                                disabled
+                                title={t('outfit.tryOnComingSoon')}
+                            >
+                                {t('outfit.generateTryOn')}
+                            </button>
                         </div>
                     </div>
                 </section>
