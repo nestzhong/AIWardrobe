@@ -68,6 +68,12 @@ def update_config(
     weather_location: Optional[str] = None,
     zodiac_sign: Optional[str] = None,
     recommendation_mode_weights: Optional[RecommendationModeWeights] = None,
+    experimental_garment_pipeline: Optional[bool] = None,
+    vision_model: Optional[str] = None,
+    image_model: Optional[str] = None,
+    image_api_base: Optional[str] = None,
+    image_api_key: Optional[str] = None,
+    image_reference_transport: Optional[str] = None,
 ) -> LLMConfig:
     """更新配置"""
     config = load_config()
@@ -100,6 +106,18 @@ def update_config(
         config.zodiac_sign = zodiac_sign.strip().lower()
     if recommendation_mode_weights is not None:
         config.recommendation_mode_weights = recommendation_mode_weights
+    if experimental_garment_pipeline is not None:
+        config.experimental_garment_pipeline = experimental_garment_pipeline
+    if vision_model is not None:
+        config.vision_model = vision_model.strip()
+    if image_model is not None:
+        config.image_model = image_model.strip()
+    if image_api_base is not None:
+        config.image_api_base = image_api_base.strip()
+    if image_api_key is not None:
+        config.image_api_key = image_api_key.strip()
+    if image_reference_transport is not None:
+        config.image_reference_transport = image_reference_transport
 
     save_config(config)
     return config
@@ -137,4 +155,11 @@ def get_masked_config() -> dict:
         "weather_location": weather_location,
         "zodiac_sign": config.zodiac_sign,
         "recommendation_mode_weights": config.recommendation_mode_weights.model_dump(),
+        "experimental_garment_pipeline": config.experimental_garment_pipeline,
+        "vision_model": config.vision_model,
+        "image_model": config.image_model,
+        "image_api_base": config.image_api_base,
+        "image_api_key_masked": _mask_key(config.image_api_key),
+        "has_image_api_key": bool(config.image_api_key),
+        "image_reference_transport": config.image_reference_transport,
     }

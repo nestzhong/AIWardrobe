@@ -28,6 +28,7 @@
 | 能力 | 说明 |
 | :--- | :--- |
 | 智能录入 | 上传衣物图片后自动抠图，并用视觉模型分析类别、颜色、风格、季节和使用场景 |
+| 多件服装录入（实验） | 上传真人照，自动拆分每件服饰（含分类/规格/bbox），逐件生成 canonical 商品图后入库；默认关闭，可在设置页开启 |
 | 本地离线抠图 | 支持 `rembg + onnxruntime` 本地服务端推理，图片不需要发到第三方抠图服务 |
 | remove.bg 兜底 | 未安装本地依赖或需要第三方效果时，可切换到 remove.bg API |
 | 天气感知推荐 | 使用 Open-Meteo 免费天气接口，按实时温度、体感、湿度、风力辅助穿搭 |
@@ -52,10 +53,15 @@ flowchart LR
     API --> Horoscope["星座运势\n/horoscope/daily"]
     API --> Config["配置中心\n/config /models /install-rembg"]
     API --> TryOn["AI 试穿\n/tryon"]
+    API --> Capture["多件服装录入（实验）\n/capture/analyze · generate · commit"]
 
     Upload --> Rembg["本地 rembg\nonnxruntime 推理"]
     Upload --> RemoveBg["remove.bg API\n可选云端抠图"]
     Upload --> LLMVision["视觉模型\n衣物语义识别"]
+
+    Capture --> LLMVision
+    Capture --> ImageGen["生图模型\nqwen-image / doubao-seedream"]
+    Capture --> Rembg
 
     Reco --> LLMText["OpenAI 兼容接口 / Gemini\n推荐文案与解释"]
     Reco --> DB
@@ -85,6 +91,30 @@ sequenceDiagram
     B->>L: 识别类别、颜色、风格语义
     B->>D: 保存图片和衣物记录
     B-->>F: 返回结构化衣物信息
+```
+
+### 多件服装录入（实验特性）
+
+```mermaid
+sequenceDiagram
+    participant F as 前端
+    participant B as FastAPI
+    participant V as 视觉模型
+    participant G as 生图模型
+    participant R as rembg
+    participant D as SQLite + uploads
+
+    F->>B: POST /api/capture/analyze（真人照）
+    B->>V: 识别服饰列表（类别/规格/bbox）
+    B->>B: 按 bbox 裁剪服装参考图
+    B-->>F: session_id + 服饰列表
+    F->>B: POST /api/capture/generate（逐件）
+    B->>G: 双图参考生成 canonical 商品图
+    B->>R: 抠成透明 PNG
+    B-->>F: 生成图 URL + 透明图 URL
+    F->>B: POST /api/capture/commit
+    B->>V: 语义分析（中文风格/季节/场景/颜色/描述）
+    B->>D: 写入衣物记录（含溯源列）
 ```
 
 ### 今日推荐
@@ -252,12 +282,20 @@ docker run -d --name ai_wardrobe -p 8000:8000 \
 | 本地 rembg | 一键安装 `rembg` 与 `onnxruntime`，安装后按钮显示“rembg 已安装” |
 | remove.bg API | 可选云端抠图服务，适合不想安装本地推理依赖的部署 |
 | Try-On | 可选自定义 AI 试穿接口 |
+| 多件服装录入（实验） | 开启后上传真人照会走「识别 → 逐件生成 → 确认入库」流程 |
+| 识别模型 | 多模态服饰识别模型，默认 `qwen3.8-flash` |
+| 生图模型 | canonical 商品图模型，默认 `qwen-image-3.0-pro`，可切换 `doubao-seedream-5.0-lite` |
+| 生图 API Base / Key | 留空则复用上方 LLM 的 API Base / Key |
+| 参考图传输方式 | `base64`（本地图片推荐）或 `url` |
 
 ## 常用 API
 
 | 接口 | 说明 |
 | :--- | :--- |
 | `POST /api/upload` | 上传衣物图片、抠图并生成语义信息 |
+| `POST /api/capture/analyze` | （实验）上传真人照，识别服饰列表并生成参考 crop |
+| `POST /api/capture/generate` | （实验）对单件服饰生成 canonical 商品图并抠图 |
+| `POST /api/capture/commit` | （实验）把选中的服饰批量写入衣柜 |
 | `GET /api/wardrobe` | 获取衣橱列表 |
 | `GET /api/clothes/{id}` | 获取衣物详情 |
 | `GET /api/weather` | 获取当前天气 |
@@ -280,6 +318,10 @@ curl "http://localhost:8000/api/recommendation?location=Shanghai,Shanghai,China&
 # 后端回归测试
 cd backend
 venv/bin/python -m unittest test_recommendation_api
+venv/bin/python -m unittest test_capture_pipeline
+
+# 多件服装录入真实网关冒烟（非 CI，会消耗额度）
+venv/bin/python test_garment_capture.py
 
 # 前端测试
 cd ../frontend
@@ -299,6 +341,7 @@ npm run build
 - 本地 rembg 安装状态展示
 - 天气缓存和地点解析缓存
 - 推荐模式、目标和可解释选择理由
+- 多件服装录入：生图请求体分支、响应解析、bbox 裁剪、生图失败降级、analyze/commit 接口
 
 ## 截图
 

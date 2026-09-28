@@ -42,6 +42,12 @@ async def set_config(config_update: LLMConfigUpdate):
             weather_location=config_update.weather_location,
             zodiac_sign=config_update.zodiac_sign,
             recommendation_mode_weights=config_update.recommendation_mode_weights,
+            experimental_garment_pipeline=config_update.experimental_garment_pipeline,
+            vision_model=config_update.vision_model,
+            image_model=config_update.image_model,
+            image_api_base=config_update.image_api_base,
+            image_api_key=config_update.image_api_key,
+            image_reference_transport=config_update.image_reference_transport,
         )
         return {
             "success": True,

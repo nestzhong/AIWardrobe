@@ -50,6 +50,52 @@ export function UploadProvider({ children }) {
     return response.json()
   }, [setStage])
 
+  const captureAnalyze = useCallback(async (file) => {
+    if (!file?.type?.startsWith('image/')) {
+      throw new Error('INVALID_IMAGE_TYPE')
+    }
+    if (uploadingRef.current) {
+      throw new Error('UPLOAD_IN_PROGRESS')
+    }
+
+    uploadingRef.current = true
+    setState(prev => ({
+      ...prev,
+      isUploading: true,
+      progress: 0,
+      statusKey: 'capture.analyzing',
+      current: 0,
+      total: 1,
+      completedSingleItem: null,
+      batchResult: null,
+      lastError: ''
+    }))
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const response = await fetch(`${API_BASE}/capture/analyze`, {
+        method: 'POST',
+        body: formData
+      })
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || 'CAPTURE_ANALYZE_FAILED')
+      }
+      return await response.json()
+    } finally {
+      uploadingRef.current = false
+      setState(prev => ({
+        ...prev,
+        isUploading: false,
+        progress: 0,
+        statusKey: '',
+        current: 0,
+        total: 0
+      }))
+    }
+  }, [])
+
   const uploadFiles = useCallback(async (files) => {
     if (!files || files.length === 0) {
       return { successItems: [], failedMessages: [] }
@@ -136,10 +182,11 @@ export function UploadProvider({ children }) {
   const value = useMemo(() => ({
     ...state,
     uploadFiles,
+    captureAnalyze,
     consumeCompletedSingleItem,
     consumeBatchResult,
     consumeLastError
-  }), [state, uploadFiles, consumeCompletedSingleItem, consumeBatchResult, consumeLastError])
+  }), [state, uploadFiles, captureAnalyze, consumeCompletedSingleItem, consumeBatchResult, consumeLastError])
 
   return (
     <UploadContext.Provider value={value}>

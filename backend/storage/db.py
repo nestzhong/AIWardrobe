@@ -17,6 +17,10 @@ from storage.models import (
     WEATHER_CACHE_UPDATED_AT_INDEX_SQL,
     LOCATION_CACHE_TABLE_SQL,
     LOCATION_CACHE_INDEX_SQL,
+    GARMENT_SESSIONS_TABLE_SQL,
+    GARMENT_DRAFTS_TABLE_SQL,
+    GARMENT_DRAFTS_INDEX_SQL,
+    CLOTHES_TRACEABILITY_COLUMNS,
 )
 
 # 数据库文件路径
@@ -42,6 +46,19 @@ async def init_db():
         await db.execute(WEATHER_CACHE_UPDATED_AT_INDEX_SQL)
         await db.execute(LOCATION_CACHE_TABLE_SQL)
         await db.execute(LOCATION_CACHE_INDEX_SQL)
+        await db.execute(GARMENT_SESSIONS_TABLE_SQL)
+        await db.execute(GARMENT_DRAFTS_TABLE_SQL)
+        await db.execute(GARMENT_DRAFTS_INDEX_SQL)
+
+        # 老库平滑升级：补齐 clothes 表的溯源列
+        cursor = await db.execute("PRAGMA table_info(clothes)")
+        existing_columns = {row[1] for row in await cursor.fetchall()}
+        for column_name, column_type in CLOTHES_TRACEABILITY_COLUMNS:
+            if column_name not in existing_columns:
+                await db.execute(
+                    f"ALTER TABLE clothes ADD COLUMN {column_name} {column_type}"
+                )
+
         await db.commit()
 
 
@@ -57,8 +74,9 @@ async def add_clothes(clothes: ClothesCreate) -> int:
             """
             INSERT INTO clothes (
                 category, item, style_semantics, season_semantics,
-                usage_semantics, color_semantics, description, image_filename
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                usage_semantics, color_semantics, description, image_filename,
+                source_image_filename, reference_image_filename, generated_image_filename
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 clothes.category,
@@ -68,7 +86,10 @@ async def add_clothes(clothes: ClothesCreate) -> int:
                 json.dumps(clothes.usage_semantics),
                 clothes.color_semantics,
                 clothes.description,
-                clothes.image_filename
+                clothes.image_filename,
+                clothes.source_image_filename,
+                clothes.reference_image_filename,
+                clothes.generated_image_filename,
             )
         )
         await db.commit()
@@ -405,6 +426,187 @@ async def upsert_location_cache(
         )
         await db.commit()
         return int(cursor.lastrowid)
+
+
+# ---------------------------------------------------------------------------
+# 服装录入（实验特性）：Person -> Canonical Garment
+# ---------------------------------------------------------------------------
+
+async def create_garment_session(
+    session_id: str,
+    source_filename: str,
+    analysis: dict[str, Any],
+) -> None:
+    """创建一次服装录入会话。"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT INTO garment_sessions (id, source_filename, analysis_json)
+            VALUES (?, ?, ?)
+            """,
+            (session_id, source_filename, json.dumps(analysis, ensure_ascii=False)),
+        )
+        await db.commit()
+
+
+async def get_garment_session(session_id: str) -> Optional[dict[str, Any]]:
+    """获取服装录入会话。"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM garment_sessions WHERE id = ? LIMIT 1",
+            (session_id,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "source_filename": row["source_filename"],
+            "analysis": json.loads(row["analysis_json"] or "{}"),
+            "created_at": row["created_at"],
+        }
+
+
+async def create_garment_draft(
+    session_id: str,
+    garment_key: str,
+    category: str,
+    item: str,
+    description: str,
+    spec: dict[str, Any],
+    bbox: Optional[list[float]],
+    crop_filename: Optional[str],
+) -> int:
+    """创建单件服饰草稿。"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
+            INSERT INTO garment_drafts (
+                session_id, garment_key, category, item, description,
+                spec_json, bbox_json, crop_filename, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            """,
+            (
+                session_id,
+                garment_key,
+                category,
+                item,
+                description,
+                json.dumps(spec or {}, ensure_ascii=False),
+                json.dumps(bbox) if bbox is not None else None,
+                crop_filename,
+            ),
+        )
+        await db.commit()
+        return int(cursor.lastrowid)
+
+
+async def get_garment_draft(
+    session_id: str, garment_key: str
+) -> Optional[dict[str, Any]]:
+    """按会话 + garment_key 获取草稿。"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT * FROM garment_drafts
+            WHERE session_id = ? AND garment_key = ?
+            LIMIT 1
+            """,
+            (session_id, garment_key),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return _row_to_garment_draft(row)
+
+
+async def list_garment_drafts(session_id: str) -> List[dict[str, Any]]:
+    """列出某会话下的全部草稿。"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT * FROM garment_drafts
+            WHERE session_id = ?
+            ORDER BY id ASC
+            """,
+            (session_id,),
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_garment_draft(row) for row in rows]
+
+
+async def update_garment_draft(
+    session_id: str,
+    garment_key: str,
+    *,
+    status: Optional[str] = None,
+    generated_filename: Optional[str] = None,
+    alpha_filename: Optional[str] = None,
+    crop_filename: Optional[str] = None,
+    error: Optional[str] = None,
+) -> bool:
+    """更新草稿状态与产物文件名。"""
+    fields: list[str] = []
+    values: list[Any] = []
+
+    if status is not None:
+        fields.append("status = ?")
+        values.append(status)
+    if generated_filename is not None:
+        fields.append("generated_filename = ?")
+        values.append(generated_filename)
+    if alpha_filename is not None:
+        fields.append("alpha_filename = ?")
+        values.append(alpha_filename)
+    if crop_filename is not None:
+        fields.append("crop_filename = ?")
+        values.append(crop_filename)
+    if error is not None:
+        fields.append("error = ?")
+        values.append(error)
+
+    if not fields:
+        return False
+
+    fields.append("updated_at = CURRENT_TIMESTAMP")
+    values.extend([session_id, garment_key])
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            f"UPDATE garment_drafts SET {', '.join(fields)} "
+            "WHERE session_id = ? AND garment_key = ?",
+            tuple(values),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+def _row_to_garment_draft(row: aiosqlite.Row) -> dict[str, Any]:
+    """将数据库行转换为服饰草稿字典。"""
+    bbox = None
+    if row["bbox_json"]:
+        try:
+            bbox = json.loads(row["bbox_json"])
+        except (json.JSONDecodeError, TypeError):
+            bbox = None
+    return {
+        "id": int(row["id"]),
+        "session_id": row["session_id"],
+        "garment_key": row["garment_key"],
+        "category": row["category"] or "",
+        "item": row["item"] or "",
+        "description": row["description"] or "",
+        "spec": json.loads(row["spec_json"] or "{}"),
+        "bbox": bbox,
+        "crop_filename": row["crop_filename"],
+        "generated_filename": row["generated_filename"],
+        "alpha_filename": row["alpha_filename"],
+        "status": row["status"] or "pending",
+        "error": row["error"] or "",
+    }
 
 
 def _row_to_clothes_item(row: aiosqlite.Row) -> ClothesItem:

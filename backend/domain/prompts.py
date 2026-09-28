@@ -24,5 +24,7 @@ JSON Schema：
 
 当图片主体是首饰/配件（如项链、手链、帽子、围巾、手表、眼镜、腰带）时，category 必须是 accessory。
 
+所有文本字段（item、style_semantics、season_semantics、usage_semantics、color_semantics、description）必须使用【中文】输出。
+
 如果无法判断，请填 "unknown"。
 """

@@ -92,7 +92,13 @@ const Settings = ({ isOpen, onClose, onSave }) => {
         tryon_api_key: '',
         tryon_model: '',
         weather_location: DEFAULT_LOCATION,
-        zodiac_sign: ''
+        zodiac_sign: '',
+        experimental_garment_pipeline: false,
+        vision_model: 'qwen3.8-flash',
+        image_model: 'qwen-image-3.0-pro',
+        image_api_base: '',
+        image_api_key: '',
+        image_reference_transport: 'base64'
     })
     const [models, setModels] = useState([])
     const [loading, setLoading] = useState(false)
@@ -101,6 +107,7 @@ const Settings = ({ isOpen, onClose, onSave }) => {
     const [hasExistingKey, setHasExistingKey] = useState(false)
     const [hasRemoveBgKey, setHasRemoveBgKey] = useState(false)
     const [hasTryonApiKey, setHasTryonApiKey] = useState(false)
+    const [hasImageApiKey, setHasImageApiKey] = useState(false)
     const [showModelSelect, setShowModelSelect] = useState(false)
     const [locationSuggestions, setLocationSuggestions] = useState([])
     const [searchingLocations, setSearchingLocations] = useState(false)
@@ -217,12 +224,18 @@ const Settings = ({ isOpen, onClose, onSave }) => {
                     tryon_api_url: data.tryon_api_url || '',
                     tryon_model: data.tryon_model || '',
                     weather_location: refreshConfig.weather_location,
-                    zodiac_sign: refreshConfig.zodiac_sign
+                    zodiac_sign: refreshConfig.zodiac_sign,
+                    experimental_garment_pipeline: Boolean(data.experimental_garment_pipeline),
+                    vision_model: data.vision_model || 'qwen3.8-flash',
+                    image_model: data.image_model || 'qwen-image-3.0-pro',
+                    image_api_base: data.image_api_base || '',
+                    image_reference_transport: data.image_reference_transport || 'base64'
                 }))
                 setInitialRefreshConfig(refreshConfig)
                 setHasExistingKey(data.has_api_key)
                 setHasRemoveBgKey(data.has_removebg_key)
                 setHasTryonApiKey(data.has_tryon_api_key)
+                setHasImageApiKey(data.has_image_api_key)
                 setLocalRembgInstalled(Boolean(data.local_rembg_installed))
             }
         } catch (error) {
@@ -323,7 +336,12 @@ const Settings = ({ isOpen, onClose, onSave }) => {
                 tryon_api_url: config.tryon_api_url,
                 tryon_model: config.tryon_model,
                 weather_location: normalizedLocation,
-                zodiac_sign: config.zodiac_sign
+                zodiac_sign: config.zodiac_sign,
+                experimental_garment_pipeline: config.experimental_garment_pipeline,
+                vision_model: config.vision_model,
+                image_model: config.image_model,
+                image_api_base: config.image_api_base,
+                image_reference_transport: config.image_reference_transport
             }
 
             if (config.api_key) {
@@ -334,6 +352,9 @@ const Settings = ({ isOpen, onClose, onSave }) => {
             }
             if (config.tryon_api_key) {
                 payload.tryon_api_key = config.tryon_api_key
+            }
+            if (config.image_api_key) {
+                payload.image_api_key = config.image_api_key
             }
 
             const response = await fetch(`${API_BASE}/config`, {
@@ -711,6 +732,119 @@ const Settings = ({ isOpen, onClose, onSave }) => {
                                             onChange={e => setConfig(prev => ({ ...prev, tryon_model: e.target.value }))}
                                             placeholder={t('settings.tryOnModelPlaceholder')}
                                         />
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="pt-2 space-y-3">
+                            <div className="text-xs font-bold tracking-widest text-zinc-400 uppercase">{t('settings.captureSection')}</div>
+
+                            <label className={`flex items-center justify-between gap-3 p-3 rounded-xl border-2 transition-colors cursor-pointer ${config.experimental_garment_pipeline ? 'border-accent bg-blue-50/20 dark:bg-blue-950/20' : 'border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
+                                <div className="flex flex-col">
+                                    <span className="font-medium text-zinc-900 dark:text-zinc-100 text-sm">{t('settings.captureEnabled')}</span>
+                                    <span className="text-xs text-zinc-500 mt-0.5">{t('settings.captureEnabledDesc')}</span>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    className="w-5 h-5 shrink-0"
+                                    checked={config.experimental_garment_pipeline}
+                                    onChange={e => setConfig(prev => ({ ...prev, experimental_garment_pipeline: e.target.checked }))}
+                                />
+                            </label>
+
+                            {config.experimental_garment_pipeline && (
+                                <>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('settings.visionModel')}</label>
+                                        <select
+                                            className="input-field appearance-none"
+                                            value={config.vision_model}
+                                            onChange={e => setConfig(prev => ({ ...prev, vision_model: e.target.value }))}
+                                        >
+                                            {models.length > 0 ? (
+                                                models.map(model => <option key={model.id} value={model.id}>{model.id}</option>)
+                                            ) : (
+                                                <option value={config.vision_model}>{config.vision_model}</option>
+                                            )}
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('settings.imageModel')}</label>
+                                        <select
+                                            className="input-field appearance-none"
+                                            value={config.image_model}
+                                            onChange={e => setConfig(prev => ({ ...prev, image_model: e.target.value }))}
+                                        >
+                                            {(() => {
+                                                const imageModels = models.filter(model => /image|seedream/i.test(model.id))
+                                                const options = imageModels.length > 0
+                                                    ? imageModels
+                                                    : [{ id: config.image_model, name: config.image_model }]
+                                                return options.map(model => <option key={model.id} value={model.id}>{model.id}</option>)
+                                            })()}
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('settings.imageApiBase')}</label>
+                                        <input
+                                            type="text"
+                                            className="input-field font-mono"
+                                            value={config.image_api_base}
+                                            onChange={e => setConfig(prev => ({ ...prev, image_api_base: e.target.value }))}
+                                            placeholder={config.api_base || 'https://api.example.com/v1'}
+                                        />
+                                        <p className="text-xs text-zinc-500">{t('settings.imageApiBaseHint')}</p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex justify-between">
+                                            {t('settings.imageApiKey')}
+                                            {hasImageApiKey && !config.image_api_key && (
+                                                <span className="text-green-500 font-normal text-xs bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded">{t('settings.configured')}</span>
+                                            )}
+                                        </label>
+                                        <input
+                                            type="password"
+                                            className="input-field font-mono"
+                                            value={config.image_api_key}
+                                            onChange={e => setConfig(prev => ({ ...prev, image_api_key: e.target.value }))}
+                                            placeholder={hasImageApiKey ? `••••••••（${t('settings.keepEmpty')}）` : t('settings.imageApiKeyPlaceholder')}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('settings.imageTransport')}</label>
+                                        <select
+                                            className="input-field appearance-none"
+                                            value={config.image_reference_transport}
+                                            onChange={e => setConfig(prev => ({ ...prev, image_reference_transport: e.target.value }))}
+                                        >
+                                            <option value="base64">{t('settings.imageTransportBase64')}</option>
+                                            <option value="url">{t('settings.imageTransportUrl')}</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="pt-1">
+                                        <p className="text-xs text-zinc-500 mb-2 font-medium">{t('settings.capturePresets')}</p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                type="button"
+                                                className="py-1.5 px-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
+                                                onClick={() => setConfig(prev => ({ ...prev, vision_model: 'qwen3.8-flash', image_model: 'qwen-image-3.0-pro', image_api_base: '' }))}
+                                            >
+                                                {t('settings.presetQwen')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="py-1.5 px-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
+                                                onClick={() => setConfig(prev => ({ ...prev, image_model: 'doubao-seedream-5.0-lite', image_api_base: '' }))}
+                                            >
+                                                {t('settings.presetDoubao')}
+                                            </button>
+                                        </div>
                                     </div>
                                 </>
                             )}

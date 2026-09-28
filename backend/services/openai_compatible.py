@@ -86,12 +86,49 @@ def extract_json_from_response(text: str) -> dict:
     raise ValueError(f"无法从响应中提取 JSON: {text}")
 
 
-async def analyze_clothes_openai(image_bytes: bytes) -> ClothesSemantics:
+def normalize_semantics_payload(result: dict) -> dict:
+    """把模型返回的语义 JSON 归一化，容忍字符串/unknown/缺失字段。"""
+    if not isinstance(result, dict):
+        result = {}
+
+    def as_list(value) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            items = [str(entry).strip() for entry in value]
+        else:
+            text = str(value).strip()
+            if not text:
+                return []
+            for sep in ("/", "、", "，", ","):
+                text = text.replace(sep, ",")
+            items = [part.strip() for part in text.split(",")]
+        return [entry for entry in items if entry and entry.lower() != "unknown"]
+
+    def as_text(value) -> str:
+        if value is None:
+            return ""
+        text = str(value).strip()
+        return "" if text.lower() == "unknown" else text
+
+    return {
+        "category": as_text(result.get("category")) or "accessory",
+        "item": as_text(result.get("item")) or "未知服饰",
+        "style_semantics": as_list(result.get("style_semantics")),
+        "season_semantics": as_list(result.get("season_semantics")),
+        "usage_semantics": as_list(result.get("usage_semantics")),
+        "color_semantics": as_text(result.get("color_semantics")),
+        "description": as_text(result.get("description")),
+    }
+
+
+async def analyze_clothes_openai(image_bytes: bytes, model: Optional[str] = None) -> ClothesSemantics:
     """
     使用 OpenAI 兼容 API 分析衣物图片
     
     Args:
         image_bytes: 图片的字节数据
+        model: 可选的模型名覆盖（默认使用 config.model；服装录入链路传 vision_model）
         
     Returns:
         ClothesSemantics: 衣物语义信息
@@ -100,6 +137,10 @@ async def analyze_clothes_openai(image_bytes: bytes) -> ClothesSemantics:
     
     if not config.api_key:
         raise ValueError("请先配置 API Key")
+
+    use_model = (model or config.model or "").strip()
+    if not use_model:
+        raise ValueError("请先配置模型")
     
     # 确保 api_base 格式正确
     api_base = config.api_base.rstrip("/")
@@ -113,7 +154,7 @@ async def analyze_clothes_openai(image_bytes: bytes) -> ClothesSemantics:
     
     # 构建请求体
     payload = {
-        "model": config.model,
+        "model": use_model,
         "messages": [
             {
                 "role": "user",
@@ -155,4 +196,4 @@ async def analyze_clothes_openai(image_bytes: bytes) -> ClothesSemantics:
         # 解析 JSON
         result = extract_json_from_response(content)
         
-        return ClothesSemantics(**result)
+        return ClothesSemantics(**normalize_semantics_payload(result))

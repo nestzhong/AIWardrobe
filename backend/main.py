@@ -15,6 +15,7 @@ from api.weather import router as weather_router
 from api.recommendation import router as recommendation_router
 from api.horoscope import router as horoscope_router
 from api.tryon import router as tryon_router
+from api.capture import router as capture_router
 from storage.db import init_db
 
 # 上传目录
@@ -60,6 +61,7 @@ app.include_router(weather_router, prefix="/api", tags=["天气"])
 app.include_router(recommendation_router, prefix="/api", tags=["AI推荐"])
 app.include_router(horoscope_router, prefix="/api", tags=["星座运势"])
 app.include_router(tryon_router, prefix="/api", tags=["AI试穿"])
+app.include_router(capture_router, prefix="/api", tags=["服装录入"])
 
 
 @app.get("/api")

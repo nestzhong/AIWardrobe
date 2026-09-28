@@ -96,6 +96,10 @@ class ClothesCreate(BaseModel):
     color_semantics: str
     description: str
     image_filename: str
+    # 溯源（可选）：原始人物照 / 服装参考 crop / 生图原图
+    source_image_filename: Optional[str] = None
+    reference_image_filename: Optional[str] = None
+    generated_image_filename: Optional[str] = None
 
 
 class WardrobeResponse(BaseModel):

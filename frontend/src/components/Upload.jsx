@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Upload as UploadIcon, Camera, Image as ImageIcon, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useUpload } from '../contexts/UploadContext'
+import GarmentReview from './GarmentReview'
+import { API_BASE } from '../utils/api'
 
 export default function Upload({ onUploadSuccess }) {
     const { t } = useTranslation()
@@ -15,20 +17,55 @@ export default function Upload({ onUploadSuccess }) {
         batchResult,
         lastError,
         uploadFiles,
+        captureAnalyze,
         consumeCompletedSingleItem,
         consumeBatchResult,
         consumeLastError
     } = useUpload()
     const [isDragging, setIsDragging] = useState(false)
     const [showCamera, setShowCamera] = useState(false)
+    const [captureEnabled, setCaptureEnabled] = useState(false)
+    const [captureData, setCaptureData] = useState(null)
     const fileInputRef = useRef(null)
     const cameraInputRef = useRef(null)
     const videoRef = useRef(null)
     const streamRef = useRef(null)
 
+    useEffect(() => {
+        let active = true
+        fetch(`${API_BASE}/config`)
+            .then(response => (response.ok ? response.json() : null))
+            .then(data => {
+                if (active && data) {
+                    setCaptureEnabled(Boolean(data.experimental_garment_pipeline))
+                }
+            })
+            .catch(() => {})
+        return () => { active = false }
+    }, [])
+
     const status = statusKey
         ? (total > 1 && current > 0 ? `${t(statusKey)} (${current}/${total})` : t(statusKey))
         : ''
+
+    const startUpload = async (files) => {
+        if (!files || files.length === 0) return
+
+        if (captureEnabled && files.length === 1) {
+            try {
+                const result = await captureAnalyze(files[0])
+                setCaptureData(result)
+            } catch (error) {
+                const message = error?.message === 'INVALID_IMAGE_TYPE'
+                    ? t('upload.selectImage')
+                    : (error?.message || 'UPLOAD_FAILED')
+                alert(`${t('upload.uploadFailed')}: ${message}`)
+            }
+            return
+        }
+
+        void uploadFiles(files)
+    }
 
     useEffect(() => {
         if (!completedSingleItem) return
@@ -66,7 +103,7 @@ export default function Upload({ onUploadSuccess }) {
         setIsDragging(false)
         const files = e.dataTransfer.files
         if (files.length > 0) {
-            void uploadFiles(Array.from(files))
+            void startUpload(Array.from(files))
         }
     }
 
@@ -118,7 +155,7 @@ export default function Upload({ onUploadSuccess }) {
         canvas.toBlob((blob) => {
             if (blob) {
                 const file = new File([blob], 'camera-photo.jpg', { type: 'image/jpeg' })
-                void uploadFiles([file])
+                void startUpload([file])
                 stopCamera()
             }
         }, 'image/jpeg', 0.9)
@@ -127,7 +164,7 @@ export default function Upload({ onUploadSuccess }) {
     const handleFileChange = (e) => {
         const files = e.target.files
         if (files && files.length > 0) {
-            void uploadFiles(Array.from(files))
+            void startUpload(Array.from(files))
         }
         e.target.value = ''
     }
@@ -150,6 +187,23 @@ export default function Upload({ onUploadSuccess }) {
                     <button className="w-16 h-16 rounded-full bg-white border-4 border-zinc-300 active:scale-95 transition-transform" onClick={capturePhoto}></button>
                     <div className="w-14"></div>
                 </div>
+            </div>
+        )
+    }
+
+    if (captureData) {
+        return (
+            <div className="w-full">
+                <GarmentReview
+                    data={captureData}
+                    onCancel={() => setCaptureData(null)}
+                    onDone={(created) => {
+                        setCaptureData(null)
+                        if (created.length === 1) {
+                            onUploadSuccess?.(created[0])
+                        }
+                    }}
+                />
             </div>
         )
     }

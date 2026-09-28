@@ -83,3 +83,51 @@ CREATE TABLE IF NOT EXISTS location_cache (
 LOCATION_CACHE_INDEX_SQL = """
 CREATE INDEX IF NOT EXISTS idx_location_cache_query_key ON location_cache(query_key);
 """
+
+
+# ---------------------------------------------------------------------------
+# 服装录入（实验特性）：Person -> Canonical Garment
+# ---------------------------------------------------------------------------
+
+# 录入会话：一张人物照一次分析
+GARMENT_SESSIONS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS garment_sessions (
+    id TEXT PRIMARY KEY,
+    source_filename TEXT NOT NULL,
+    analysis_json TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+# 会话下的单件服饰草稿
+GARMENT_DRAFTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS garment_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    garment_key TEXT NOT NULL,
+    category TEXT,
+    item TEXT,
+    description TEXT,
+    spec_json TEXT,
+    bbox_json TEXT,
+    crop_filename TEXT,
+    generated_filename TEXT,
+    alpha_filename TEXT,
+    status TEXT DEFAULT 'pending',
+    error TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(session_id, garment_key)
+);
+"""
+
+GARMENT_DRAFTS_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_garment_drafts_session ON garment_drafts(session_id);
+"""
+
+# clothes 表溯源列（老库需 ALTER TABLE 补齐）
+CLOTHES_TRACEABILITY_COLUMNS = (
+    ("source_image_filename", "TEXT"),
+    ("reference_image_filename", "TEXT"),
+    ("generated_image_filename", "TEXT"),
+)

@@ -40,6 +40,13 @@ class LLMConfig(BaseModel):
     zodiac_sign: str = ""
     # 推荐模式权重
     recommendation_mode_weights: RecommendationModeWeights = Field(default_factory=RecommendationModeWeights)
+    # 服装录入（实验特性）：Person -> Canonical Garment
+    experimental_garment_pipeline: bool = False  # 多件拆分 + canonical 生成总开关
+    vision_model: str = "qwen3.8-flash"  # 多模态识别模型
+    image_model: str = "qwen-image-3.0-pro"  # canonical 生图模型
+    image_api_base: str = ""  # 留空复用 api_base
+    image_api_key: str = ""  # 留空复用 api_key
+    image_reference_transport: Literal["base64", "url"] = "base64"  # 参考图传输方式
 
 
 class LLMConfigUpdate(BaseModel):
@@ -56,6 +63,12 @@ class LLMConfigUpdate(BaseModel):
     weather_location: Optional[str] = None
     zodiac_sign: Optional[str] = None
     recommendation_mode_weights: Optional[RecommendationModeWeights] = None
+    experimental_garment_pipeline: Optional[bool] = None
+    vision_model: Optional[str] = None
+    image_model: Optional[str] = None
+    image_api_base: Optional[str] = None
+    image_api_key: Optional[str] = None
+    image_reference_transport: Optional[Literal["base64", "url"]] = None
 
 
 class AvailableModel(BaseModel):
