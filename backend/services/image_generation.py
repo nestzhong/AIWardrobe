@@ -14,6 +14,7 @@ from typing import Any, List, Optional, Sequence, Tuple
 import httpx
 
 from domain.prompts_garment import resolve_canonical_size
+from domain.prompts_tryon import resolve_tryon_size
 from services.gateway_utils import normalize_api_base, to_data_url
 from storage.config_store import load_config
 
@@ -29,6 +30,8 @@ def detect_provider(model: str) -> str:
 
 
 def _size_for(category: str, provider: str) -> str:
+    if (category or "").strip().lower() == "tryon":
+        return resolve_tryon_size(provider)
     if provider == "qwen":
         return resolve_canonical_size(category, "qwen")
     return resolve_canonical_size(category, "doubao")

@@ -74,6 +74,7 @@ def update_config(
     image_api_base: Optional[str] = None,
     image_api_key: Optional[str] = None,
     image_reference_transport: Optional[str] = None,
+    person_image_filename: Optional[str] = None,
 ) -> LLMConfig:
     """更新配置"""
     config = load_config()
@@ -118,6 +119,8 @@ def update_config(
         config.image_api_key = image_api_key.strip()
     if image_reference_transport is not None:
         config.image_reference_transport = image_reference_transport
+    if person_image_filename is not None:
+        config.person_image_filename = person_image_filename.strip()
 
     save_config(config)
     return config
@@ -162,4 +165,6 @@ def get_masked_config() -> dict:
         "image_api_key_masked": _mask_key(config.image_api_key),
         "has_image_api_key": bool(config.image_api_key),
         "image_reference_transport": config.image_reference_transport,
+        "person_image_url": f"/uploads/person/{config.person_image_filename}" if config.person_image_filename else "",
+        "has_person_image": bool(config.person_image_filename),
     }

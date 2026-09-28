@@ -5,6 +5,9 @@ import { ChevronLeft, ChevronRight, Shuffle } from 'lucide-react'
 
 import { API_BASE, toImageUrl } from '../utils/api'
 import OutfitCanvas from '../components/OutfitCanvas'
+import Settings from '../components/Settings'
+import TryOnDialog from '../components/TryOnDialog'
+import useTryOn from '../hooks/useTryOn'
 
 const CATEGORIES = [
     { key: 'tops', labelKey: 'outfit.top' },
@@ -27,7 +30,19 @@ export default function Outfit() {
 
     const [transforms, setTransforms] = useState({ tops: null, bottoms: null, shoes: null })
     const [selectedCategory, setSelectedCategory] = useState(null)
+    const [settingsOpen, setSettingsOpen] = useState(false)
+    const [tryOnOpen, setTryOnOpen] = useState(false)
     const previousItemIds = useRef({ tops: null, bottoms: null, shoes: null })
+
+    const {
+        hasPersonImage,
+        statusLoaded,
+        generating,
+        resultUrl,
+        error: tryOnError,
+        refreshPersonStatus,
+        generate
+    } = useTryOn()
 
     useEffect(() => {
         const controller = new AbortController()
@@ -178,6 +193,35 @@ export default function Outfit() {
     const bottomItem = getCurrentItem('bottoms')
     const shoesItem = getCurrentItem('shoes')
 
+    const tryOnGarmentIds = [topItem, bottomItem, shoesItem].filter(Boolean).map(item => item.id)
+    const canGenerate = tryOnGarmentIds.length > 0
+
+    const handleGenerateTryOn = () => {
+        if (!canGenerate) return
+        setTryOnOpen(true)
+        if (hasPersonImage) {
+            void generate(tryOnGarmentIds)
+        }
+    }
+
+    const handleOpenSettings = () => {
+        setTryOnOpen(false)
+        setSettingsOpen(true)
+    }
+
+    const handleCloseSettings = () => {
+        setSettingsOpen(false)
+        void refreshPersonStatus()
+    }
+
+    const tryOnPhase = !hasPersonImage
+        ? 'gate'
+        : generating
+            ? 'generating'
+            : tryOnError
+                ? 'error'
+                : 'result'
+
     return (
         <div className="px-3 sm:px-4 lg:px-0 pt-3 pb-2 flex flex-col max-w-6xl mx-auto w-full">
             <header className="shrink-0 mb-3">
@@ -223,12 +267,12 @@ export default function Outfit() {
                         </div>
                         <div className="pt-3">
                             <button
-                                className="btn-primary w-full opacity-60 cursor-not-allowed"
+                                className="btn-primary w-full"
                                 type="button"
-                                disabled
-                                title={t('outfit.tryOnComingSoon')}
+                                onClick={handleGenerateTryOn}
+                                disabled={!canGenerate || generating || !statusLoaded}
                             >
-                                {t('outfit.generateTryOn')}
+                                {generating ? t('outfit.tryOnGenerating') : t('outfit.generateTryOn')}
                             </button>
                         </div>
                     </div>
@@ -287,6 +331,18 @@ export default function Outfit() {
                     })}
                 </aside>
             </div>
+
+            <Settings isOpen={settingsOpen} onClose={handleCloseSettings} />
+
+            <TryOnDialog
+                open={tryOnOpen}
+                phase={tryOnPhase}
+                resultUrl={resultUrl}
+                error={tryOnError}
+                onClose={() => setTryOnOpen(false)}
+                onOpenSettings={handleOpenSettings}
+                onRetry={() => generate(tryOnGarmentIds)}
+            />
         </div>
     )
 }

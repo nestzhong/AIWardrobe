@@ -47,6 +47,8 @@ class LLMConfig(BaseModel):
     image_api_base: str = ""  # 留空复用 api_base
     image_api_key: str = ""  # 留空复用 api_key
     image_reference_transport: Literal["base64", "url"] = "base64"  # 参考图传输方式
+    # 本人照片（设置页上传，用于 AI 试穿）
+    person_image_filename: str = ""
 
 
 class LLMConfigUpdate(BaseModel):

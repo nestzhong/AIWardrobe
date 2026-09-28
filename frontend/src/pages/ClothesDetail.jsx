@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { ArrowLeft, RefreshCw } from 'lucide-react'
 
 import { API_BASE, toImageUrl } from '../utils/api'
+import Settings from '../components/Settings'
+import TryOnDialog from '../components/TryOnDialog'
+import useTryOn from '../hooks/useTryOn'
 
 export default function ClothesDetail() {
     const { t } = useTranslation()
@@ -12,11 +15,18 @@ export default function ClothesDetail() {
     const [item, setItem] = useState(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
-    const [personImageFile, setPersonImageFile] = useState(null)
-    const [personImagePreview, setPersonImagePreview] = useState('')
-    const [tryOnResultUrl, setTryOnResultUrl] = useState('')
-    const [tryOnLoading, setTryOnLoading] = useState(false)
-    const [tryOnError, setTryOnError] = useState('')
+    const [settingsOpen, setSettingsOpen] = useState(false)
+    const [tryOnOpen, setTryOnOpen] = useState(false)
+
+    const {
+        hasPersonImage,
+        statusLoaded,
+        generating,
+        resultUrl,
+        error: tryOnError,
+        refreshPersonStatus,
+        generate
+    } = useTryOn()
 
     useEffect(() => {
         fetchClothesDetail()
@@ -55,51 +65,31 @@ export default function ClothesDetail() {
         )
     }
 
-    const handlePersonImageChange = (event) => {
-        const file = event.target.files?.[0]
-        if (!file) return
-        setPersonImageFile(file)
-        setTryOnResultUrl('')
-        setTryOnError('')
-
-        const nextPreview = URL.createObjectURL(file)
-        if (personImagePreview) {
-            URL.revokeObjectURL(personImagePreview)
-        }
-        setPersonImagePreview(nextPreview)
-    }
-
-    const handleTryOn = async () => {
-        if (!personImageFile || !item) {
-            setTryOnError(t('clothesDetail.tryOnNeedPersonImage'))
-            return
-        }
-
-        setTryOnLoading(true)
-        setTryOnError('')
-        try {
-            const formData = new FormData()
-            formData.append('person_image', personImageFile)
-            formData.append('garment_id', String(item.id))
-            formData.append('category', item.category || 'top')
-
-            const response = await fetch(`${API_BASE}/tryon`, {
-                method: 'POST',
-                body: formData
-            })
-
-            const data = await response.json().catch(() => ({}))
-            if (!response.ok || !data.result_image_url) {
-                throw new Error(data.detail || t('clothesDetail.tryOnFailed'))
-            }
-
-            setTryOnResultUrl(toImageUrl(data.result_image_url))
-        } catch (err) {
-            setTryOnError(err.message || t('clothesDetail.tryOnFailed'))
-        } finally {
-            setTryOnLoading(false)
+    const handleGenerateTryOn = () => {
+        if (!item) return
+        setTryOnOpen(true)
+        if (hasPersonImage) {
+            void generate([item.id])
         }
     }
+
+    const handleOpenSettings = () => {
+        setTryOnOpen(false)
+        setSettingsOpen(true)
+    }
+
+    const handleCloseSettings = () => {
+        setSettingsOpen(false)
+        void refreshPersonStatus()
+    }
+
+    const tryOnPhase = !hasPersonImage
+        ? 'gate'
+        : generating
+            ? 'generating'
+            : tryOnError
+                ? 'error'
+                : 'result'
 
     if (loading) {
         return (
@@ -190,34 +180,30 @@ export default function ClothesDetail() {
                         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{t('clothesDetail.tryOnHint')}</p>
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="btn-secondary inline-flex cursor-pointer">
-                            <input type="file" accept="image/*" className="hidden" onChange={handlePersonImageChange} />
-                            {t('clothesDetail.tryOnUpload')}
-                        </label>
-                        {personImagePreview && (
-                            <img src={personImagePreview} alt="person preview" className="media-tile w-full max-h-80 object-contain p-2" />
-                        )}
-                    </div>
-
                     <div>
-                        <button className="btn-primary" onClick={handleTryOn} disabled={tryOnLoading}>
-                            {tryOnLoading ? t('clothesDetail.tryOnGenerating') : t('clothesDetail.tryOnGenerate')}
+                        <button
+                            className="btn-primary"
+                            type="button"
+                            onClick={handleGenerateTryOn}
+                            disabled={generating || !statusLoaded}
+                        >
+                            {generating ? t('clothesDetail.tryOnGenerating') : t('clothesDetail.tryOnGenerate')}
                         </button>
                     </div>
-
-                    {tryOnError && (
-                        <p className="text-sm text-red-500">{tryOnError}</p>
-                    )}
-
-                    {tryOnResultUrl && (
-                        <div className="space-y-2">
-                            <h4 className="text-sm font-medium text-zinc-500">{t('clothesDetail.tryOnResult')}</h4>
-                            <img src={tryOnResultUrl} alt="try on result" className="media-tile w-full max-h-[28rem] object-contain p-2" />
-                        </div>
-                    )}
                 </section>
             </div>
+
+            <Settings isOpen={settingsOpen} onClose={handleCloseSettings} />
+
+            <TryOnDialog
+                open={tryOnOpen}
+                phase={tryOnPhase}
+                resultUrl={resultUrl}
+                error={tryOnError}
+                onClose={() => setTryOnOpen(false)}
+                onOpenSettings={handleOpenSettings}
+                onRetry={() => generate([item.id])}
+            />
         </div>
     )
 }

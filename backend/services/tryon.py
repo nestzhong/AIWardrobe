@@ -1,81 +1,66 @@
 """
-AI 试穿服务
+AI 试穿服务（以图生图）。
+
+与服饰商品图（canonical）共用同一生图模型与网关协议：
+参考图 = 本人照片 + 单品服饰商品图，输出本人穿着这些服饰的照片。
 """
 from __future__ import annotations
 
-import base64
-from typing import Any
+from typing import Any, Optional, Sequence
 
-import httpx
-
+from domain.prompts_tryon import TRYON_NEGATIVE_PROMPT, build_tryon_prompt
+from services.image_generation import generate_image
 from storage.config_store import load_config
 
 
 class TryOnResult:
-    def __init__(self, result_image_url: str | None = None, image_bytes: bytes | None = None, image_ext: str = "png"):
+    def __init__(
+        self,
+        result_image_url: Optional[str] = None,
+        image_bytes: Optional[bytes] = None,
+        image_ext: str = "png",
+    ):
         self.result_image_url = result_image_url
         self.image_bytes = image_bytes
         self.image_ext = image_ext
 
 
-def _guess_ext(content_type: str | None) -> str:
-    if not content_type:
-        return "png"
-    if "jpeg" in content_type or "jpg" in content_type:
-        return "jpg"
-    if "webp" in content_type:
-        return "webp"
-    return "png"
+async def run_tryon(
+    person_image_bytes: bytes,
+    garments: Sequence[dict[str, Any]],
+) -> TryOnResult:
+    """
+    以图生图生成试穿图。
 
-
-async def run_tryon(person_image_bytes: bytes, garment_image_bytes: bytes, category: str) -> TryOnResult:
+    Args:
+        person_image_bytes: 本人照片字节
+        garments: 服饰列表，元素含 category / item / description / image_bytes
+    """
     config = load_config()
 
-    if config.tryon_provider == "disabled":
-        raise ValueError("试穿功能未启用，请先在设置中配置 Try-On Provider。")
+    if not config.image_model:
+        raise ValueError("未配置生图模型（image_model），请先在设置中完成生图配置。")
+    if not person_image_bytes:
+        raise ValueError("缺少本人照片，请先在设置中上传。")
 
-    if not config.tryon_api_url:
-        raise ValueError("未配置 Try-On API URL，请在设置中填写。")
+    references = [person_image_bytes]
+    for garment in garments:
+        image_bytes = garment.get("image_bytes")
+        if image_bytes:
+            references.append(image_bytes)
 
-    headers: dict[str, str] = {}
-    if config.tryon_api_key:
-        headers["Authorization"] = f"Bearer {config.tryon_api_key}"
+    if len(references) < 2:
+        raise ValueError("缺少服饰图片，请至少选择一件有图片的服饰。")
 
-    files = {
-        "person_image": ("person.png", person_image_bytes, "image/png"),
-        "garment_image": ("garment.png", garment_image_bytes, "image/png"),
-    }
+    prompt = build_tryon_prompt(garments)
 
-    data: dict[str, str] = {
-        "category": category or "top",
-    }
-    if config.tryon_model:
-        data["model"] = config.tryon_model
+    generated_bytes = await generate_image(
+        prompt=prompt,
+        model=config.image_model,
+        category="tryon",
+        reference_images=references,
+        negative_prompt=TRYON_NEGATIVE_PROMPT,
+        watermark=False,
+    )
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(config.tryon_api_url, headers=headers, files=files, data=data)
-
-    if response.status_code >= 400:
-        detail = response.text.strip()
-        raise ValueError(f"Try-On 调用失败（{response.status_code}）：{detail[:400]}")
-
-    content_type = response.headers.get("content-type", "")
-    if content_type.startswith("image/"):
-        return TryOnResult(image_bytes=response.content, image_ext=_guess_ext(content_type))
-
-    payload: dict[str, Any] = response.json()
-    for key in ("result_image_url", "image_url", "result_url", "output_url"):
-        value = payload.get(key)
-        if isinstance(value, str) and value:
-            return TryOnResult(result_image_url=value)
-
-    for key in ("result_image_base64", "image_base64", "output_base64"):
-        value = payload.get(key)
-        if isinstance(value, str) and value:
-            try:
-                image_bytes = base64.b64decode(value)
-                return TryOnResult(image_bytes=image_bytes, image_ext="png")
-            except Exception as exc:
-                raise ValueError(f"Try-On 返回的 base64 无法解析：{exc}")
-
-    raise ValueError("Try-On 返回格式不支持：未找到结果图片字段。")
+    return TryOnResult(image_bytes=generated_bytes, image_ext="png")

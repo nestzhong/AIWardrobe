@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import i18n from '../i18n'
+import { ThemeProvider } from '../contexts/ThemeContext'
 import Outfit from '../pages/Outfit'
 
 // jsdom 不一定实现 PointerEvent，补一个最小实现让 fireEvent 能带 clientX / pointerId
@@ -17,15 +18,22 @@ const wardrobeResponse = {
 }
 
 const renderOutfit = () => render(
-  <MemoryRouter>
-    <Outfit />
-  </MemoryRouter>,
+  <ThemeProvider>
+    <MemoryRouter>
+      <Outfit />
+    </MemoryRouter>
+  </ThemeProvider>,
 )
 
 describe('Outfit canvas interactions', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     i18n.changeLanguage('en')
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    })
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).endsWith('/wardrobe')) {
         return { ok: true, json: async () => wardrobeResponse }
@@ -38,7 +46,7 @@ describe('Outfit canvas interactions', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders one draggable layer per garment and a placeholder try-on button', async () => {
+  it('renders one draggable layer per garment and an enabled try-on button', async () => {
     renderOutfit()
 
     const layers = await waitFor(() => {
@@ -50,7 +58,7 @@ describe('Outfit canvas interactions', () => {
     expect(layers[0].getAttribute('data-category')).toBe('tops')
 
     const tryOnButton = screen.getByRole('button', { name: 'Generate try-on' })
-    expect(tryOnButton.disabled).toBe(true)
+    await waitFor(() => expect(tryOnButton.disabled).toBe(false))
   })
 
   it('selects a garment on click and shows the editing toolbar', async () => {

@@ -37,7 +37,7 @@
 | 多模式推荐 | `balanced`、`goal_first`、`wardrobe_first` 三种策略，适配均衡、目标优先和库存优先 |
 | 可解释选择 | 推荐结果会展示上装、下装、鞋履和配饰的选择理由 |
 | 语音目标输入 | 可用语音输入通勤、约会、运动、面试等场景目标 |
-| AI 试穿扩展 | 支持配置自定义 Try-On 接口，保留接入第三方试穿服务的能力 |
+| AI 试穿 | 上传本人照片后，用与商品图相同的生图模型，把衣柜单品以图生图试穿到本人照片上 |
 | OS 26 风格 UI | 采用 Liquid Glass 方向的透明、浮层、柔和边框与响应式移动端体验 |
 
 ## 架构图
@@ -52,7 +52,7 @@ flowchart LR
     API --> Weather["天气与城市\n/weather /cities"]
     API --> Horoscope["星座运势\n/horoscope/daily"]
     API --> Config["配置中心\n/config /models /install-rembg"]
-    API --> TryOn["AI 试穿\n/tryon"]
+    API --> TryOn["AI 试穿\n/tryon /person-image"]
     API --> Capture["多件服装录入（实验）\n/capture/analyze · generate · commit"]
 
     Upload --> Rembg["本地 rembg\nonnxruntime 推理"]
@@ -281,7 +281,7 @@ docker run -d --name ai_wardrobe -p 8000:8000 \
 | 星座 | 今日星座运势和幸运色推荐使用 |
 | 本地 rembg | 一键安装 `rembg` 与 `onnxruntime`，安装后按钮显示“rembg 已安装” |
 | remove.bg API | 可选云端抠图服务，适合不想安装本地推理依赖的部署 |
-| Try-On | 可选自定义 AI 试穿接口 |
+| 本人照片 | 在设置页上传，作为 AI 试穿的参考人像，仅保存在本地服务器 |
 | 多件服装录入（实验） | 开启后上传真人照会走「识别 → 逐件生成 → 确认入库」流程 |
 | 识别模型 | 多模态服饰识别模型，默认 `qwen3.8-flash` |
 | 生图模型 | canonical 商品图模型，默认 `qwen-image-3.0-pro`，可切换 `doubao-seedream-5.0-lite` |
@@ -302,9 +302,11 @@ docker run -d --name ai_wardrobe -p 8000:8000 \
 | `GET /api/cities` | 搜索城市与地点 |
 | `GET /api/horoscope/daily` | 获取今日星座运势 |
 | `GET /api/recommendation` | 获取今日穿搭推荐 |
-| `POST /api/config` | 保存模型、天气、星座、抠图、试穿配置 |
+| `POST /api/config` | 保存模型、天气、星座、抠图、生图配置 |
 | `POST /api/install-rembg` | 安装或检测本地 rembg 依赖 |
-| `POST /api/tryon` | 调用自定义 AI 试穿接口 |
+| `POST /api/person-image` | 上传或替换本人照片（供 AI 试穿使用） |
+| `DELETE /api/person-image` | 移除本人照片 |
+| `POST /api/tryon` | 以本人照片 + 单品服饰为参考图生成试穿图，body 为 `{ "garment_ids": [1, 2, 3] }` |
 
 推荐接口示例：
 

@@ -16,6 +16,7 @@ from api.recommendation import router as recommendation_router
 from api.horoscope import router as horoscope_router
 from api.tryon import router as tryon_router
 from api.capture import router as capture_router
+from api.person import router as person_router
 from storage.db import init_db
 
 # 上传目录
@@ -62,6 +63,7 @@ app.include_router(recommendation_router, prefix="/api", tags=["AI推荐"])
 app.include_router(horoscope_router, prefix="/api", tags=["星座运势"])
 app.include_router(tryon_router, prefix="/api", tags=["AI试穿"])
 app.include_router(capture_router, prefix="/api", tags=["服装录入"])
+app.include_router(person_router, prefix="/api", tags=["本人照片"])
 
 
 @app.get("/api")
@@ -81,7 +83,8 @@ async def api_info():
             "ai_recommendation": "GET /api/recommendation",
             "daily_horoscope": "GET /api/horoscope/daily",
             "install_rembg": "POST /api/install-rembg",
-            "tryon": "POST /api/tryon"
+            "tryon": "POST /api/tryon",
+            "person_image": "POST /api/person-image"
         }
     }
 
