@@ -6,9 +6,13 @@ Thumbs.db
 .vscode/
 *.log
 
+# Local agent instructions
+AGENTS.md
+
 # Python Backend
 **/__pycache__/
 *.pyc
+*.pyo
 backend/venv/
 backend/.env
 backend/wardrobe.db
